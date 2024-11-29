@@ -1,0 +1,8 @@
+repo1:
+  target_repo: https://gitcode.com/test-org/test-repo-1.git
+  namespace: test-org
+  repo_name: test-repo-1
+repo2:
+  target_repo: https://gitcode.com/test-org/test-repo-2.git
+  namespace: test-org
+  repo_name: test-repo-2
