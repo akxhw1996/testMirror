@@ -1,6 +1,5 @@
 use hmac::{Hmac, Mac};
 use sha2::Sha256;
-use std::env;
 
 type HmacSha256 = Hmac<Sha256>;
 

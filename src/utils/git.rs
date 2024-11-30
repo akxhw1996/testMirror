@@ -3,7 +3,7 @@ use git2::{Repository, RemoteCallbacks, PushOptions};
 use std::env;
 
 use crate::models::webhook::{ParsedWebhookData, Label, ParsedPushData};
-use crate::utils::{file, gitcode};
+use crate::utils::{file, gitcode, config};
 
 pub fn clone_repository(repo_url: &str, local_path: &PathBuf, platform: &str) -> Result<Repository, git2::Error> {
     println!("Starting repository clone:");
@@ -189,7 +189,16 @@ pub fn process_github_pr(webhook_data: &ParsedWebhookData) -> Result<String, git
             println!("Merge request fetched successfully");
             
             println!("Adding target remote repository");
-            match add_remote_repository(&local_path, "target", "https://gitcode.com/openHiTLS/openhitls-auto-cherry-test.git") {
+            // Read config and get target repo URL
+            let config = config::read_config("config.yml").map_err(|e| {
+                git2::Error::from_str(&format!("Failed to read config: {}", e))
+            })?;
+            
+            let repo_config = config.repos.get(&webhook_data.repo_name).ok_or_else(|| {
+                git2::Error::from_str(&format!("Repository {} not found in config", webhook_data.repo_name))
+            })?;
+            
+            match add_remote_repository(&local_path, "target", &repo_config.target_repo) {
                 Ok(_) => println!("Target remote added successfully"),
                 Err(e) => {
                     println!("Failed to add remote repository: {}", e);
@@ -325,6 +334,7 @@ pub fn github_credentials_callback(
     let username = env::var("GITHUB_USERNAME").expect("GITHUB_USERNAME not set in environment");
     let token = env::var("GITHUB_TOKEN").expect("GITHUB_TOKEN not set in environment");
     println!("Using GitHub credentials for user: {}", username);
+    println!("Token starts with: {}...", &token[..10]);
     // For GitHub, we use the token as the password
     git2::Cred::userpass_plaintext(&username, &token)
 }
@@ -371,7 +381,6 @@ pub fn switch_branch(repo_path: &PathBuf, branch_name: &str) -> Result<(), git2:
 
 pub fn cherry_pick_commit(repo_path: &PathBuf, commit_id: &str, _branch_name: &str, pr_url: &str) -> Result<(), git2::Error> {
     let repo = Repository::open(repo_path)?;
-    println!("Repository opened successfully");
 
     // Find the commit to cherry-pick
     let commit = repo.find_commit(repo.revparse_single(commit_id)?.id())?;
@@ -462,38 +471,4 @@ pub fn add_remote_repository(
     println!("Added remote '{}' with URL: {}", remote_name, remote_url);
     
     Ok(())
-}
-
-pub fn parse_branch_label(labels: &[Label]) -> Vec<Label> {
-    labels.iter()
-        .filter(|label| label.title.starts_with("br: "))
-        .cloned()
-        .collect()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_parse_branch_label() {
-        let label = Label {
-            title: "br: main".to_string(),
-            description: Some("main".to_string()),
-            color: None,
-            created_at: None,
-            expires_at: None,
-            group_id: None,
-            id: None,
-            project_id: None,
-            template: None,
-            r#type: None,
-            updated_at: None,
-        };
-        let labels = vec![label];
-        let branch_labels = parse_branch_label(&labels);
-        assert_eq!(branch_labels.len(), 1);
-        assert_eq!(branch_labels[0].title, "br: main");
-        assert_eq!(branch_labels[0].description.as_ref().unwrap(), "main");
-    }
 }

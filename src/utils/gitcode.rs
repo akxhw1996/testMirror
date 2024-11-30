@@ -1,6 +1,5 @@
 use serde::{Deserialize, Serialize};
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION, USER_AGENT};
-use crate::utils::request;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct GitAuthor {

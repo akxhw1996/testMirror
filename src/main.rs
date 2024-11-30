@@ -1,7 +1,6 @@
 #[macro_use] extern crate rocket;
 
 use rocket::routes;
-use rocket::State;
 use std::sync::RwLock;
 use std::process;
 use rpassword::read_password;
@@ -15,13 +14,15 @@ mod models;
 mod utils;
 mod api;
 
+
 #[launch]
 fn rocket() -> _ {
     // Load environment variables from .env file
     dotenv::dotenv().ok();
     print!("Enter service key: ");
     std::io::stdout().flush().unwrap();
-    let key = read_password().unwrap();        
+    let password = read_password().unwrap();
+    let key = utils::hash::sha256_hex(&password);
     
     // Decrypt environment variables
     let env_vars = [

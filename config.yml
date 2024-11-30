@@ -1,0 +1,4 @@
+hitlsSync:
+  target_repo: https://gitcode.com/openHiTLS/openhitls-auto-cherry-test.git
+  namespace: openHiTLS
+  repo_name: openhitls-auto-cherry-test

@@ -1,10 +1,8 @@
 use crate::models::webhook::{
-    WebhookPayload, ParsedWebhookData, Label,
-    GitHubLabel, GitHubPullRequest, GitHubRepository, GitHubWebhookPayload,
+    WebhookPayload, ParsedWebhookData, Label, GitHubWebhookPayload,
     GitCodePushPayload, ParsedPushData
 };
 use serde_json;
-use serde::{Serialize, Deserialize};
 
 pub fn parse_gitcode_pr_data(json_str: &str) -> Result<ParsedWebhookData, serde_json::Error> {
     // Parse the JSON string into our struct
@@ -15,15 +13,7 @@ pub fn parse_gitcode_pr_data(json_str: &str) -> Result<ParsedWebhookData, serde_
         .map(|labels| labels.into_iter().map(|label| Label {
             title: label.title,
             description: label.description,
-            color: None,
-            created_at: None,
-            expires_at: None,
-            group_id: None,
-            id: None,
-            project_id: None,
-            template: None,
             r#type: None,
-            updated_at: None,
         }).collect())
         .unwrap_or_default();
     
@@ -51,15 +41,7 @@ pub fn parse_github_pr_data(json_str: &str) -> Result<ParsedWebhookData, serde_j
         .map(|label| Label {
             title: label.name,
             description: label.description,
-            color: None,
-            created_at: None,
-            expires_at: None,
-            group_id: None,
-            id: None,
-            project_id: None,
-            template: None,
             r#type: None,
-            updated_at: None,
         })
         .collect();
     

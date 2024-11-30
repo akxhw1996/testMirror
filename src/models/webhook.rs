@@ -2,17 +2,9 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Label {
-    pub color: Option<String>,
-    pub created_at: Option<String>,
     pub description: Option<String>,
-    pub expires_at: Option<String>,
-    pub group_id: Option<i64>,
-    pub id: Option<i64>,
-    pub project_id: Option<i64>,
-    pub template: Option<bool>,
     pub title: String,
     pub r#type: Option<String>,
-    pub updated_at: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -142,10 +134,16 @@ impl GitCodeCommit {
         // Find the marker in the message
         self.message
             .find(CHERRY_PICK_MARKER)
-            .map(|start_idx| {
+            .and_then(|start_idx| {
                 // Get the substring starting after the marker
                 let url_start = start_idx + CHERRY_PICK_MARKER.len();
-                self.message[url_start..].trim().to_string()
+                let url = self.message[url_start..].trim().to_string();
+                // Only return Some if the URL contains gitcode.com
+                if url.contains("gitcode.com") {
+                    Some(url)
+                } else {
+                    None
+                }
             })
     }
 
