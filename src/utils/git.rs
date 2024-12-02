@@ -44,9 +44,9 @@ pub fn process_pr(webhook_data: &ParsedWebhookData) -> Result<String, git2::Erro
     // Check if action is "merge" and state is "merged"
     match (&webhook_data.action, &webhook_data.state) {
         (Some(action), Some(state)) if action == "close" && state == "closed" => {
-            // Check if the label in webhook_data contains a label with title "approval: ready"
-            if !webhook_data.labels.iter().any(|label| label.title == "approval: ready") {
-                return Ok("PR is closed but doesn't have approval: ready label".to_string());
+            // Check if the label in webhook_data contains a label with title "approval: done"
+            if !webhook_data.labels.iter().any(|label| label.title == "approval: done") {
+                return Ok("PR is closed but doesn't have approval: done label".to_string());
             }
 
             let br_labels: Vec<&Label> = webhook_data.labels.iter()
@@ -125,12 +125,12 @@ pub fn process_github_pr(webhook_data: &ParsedWebhookData) -> Result<String, git
         (Some(action), Some(state)) if action == "closed" && state == "closed" => {
             info!("PR is closed, checking labels");
             
-            // Check if the label in webhook_data contains a label with title "approval: ready"
-            if !webhook_data.labels.iter().any(|label| label.title == "approval: ready") {
-                info!("PR doesn't have approval: ready label");
-                return Ok("PR is closed but doesn't have approval: ready label".to_string());
+            // Check if the label in webhook_data contains a label with title "approval: done"
+            if !webhook_data.labels.iter().any(|label| label.title == "approval: done") {
+                info!("PR doesn't have approval: done label");
+                return Ok("PR is closed but doesn't have approval: done label".to_string());
             }
-            info!("Found approval: ready label");
+            info!("Found approval: done label");
 
             let br_labels: Vec<&Label> = webhook_data.labels.iter()
                 .filter(|label| label.title.starts_with("br:"))

@@ -66,7 +66,7 @@ pub fn get_commit_list_of_pr(base_url: &str, namespace: &str, repo_name: &str, p
         info!("Adding User-Agent header");
         headers.insert(
             USER_AGENT,
-            HeaderValue::from_static("akxhw1996"),
+            HeaderValue::from_static("HiTLS_GIT_BOT"),
         );
     }
 
