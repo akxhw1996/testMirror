@@ -6,4 +6,4 @@ pub mod config;
 pub mod hmac;
 pub mod aes_cbc;
 pub mod hash;
-pub mod mirror;
+pub mod logging;
