@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 use git2::{Repository, RemoteCallbacks, PushOptions};
 use std::env;
-use log::{info, warn, error};
+use log::{info, error};
 
 use crate::models::webhook::{ParsedWebhookData, Label, ParsedPushData};
 use crate::utils::{file, gitcode, config};
@@ -12,31 +12,18 @@ pub fn clone_repository(repo_url: &str, local_path: &PathBuf, platform: &str) ->
     info!("  Local path: {:?}", local_path);
     info!("  Platform: {}", platform);
 
-    let mut callbacks = RemoteCallbacks::new();
-    callbacks.credentials(match platform {
-        "github" => {
-            info!("Using GitHub credentials");
-            github_credentials_callback
-        },
-        "gitcode" => {
-            info!("Using GitCode credentials");
-            gitcode_credentials_callback
-        },
-        _ => return Err(git2::Error::from_str("Unsupported platform")),
-    });
-
-    info!("Setting up fetch options");
-    let mut fetch_options = git2::FetchOptions::new();
-    fetch_options.remote_callbacks(callbacks);
-
-    info!("Configuring repository builder");
+    // Set up Git configuration before cloning
+    let opts = git2::FetchOptions::new();
     let mut builder = git2::build::RepoBuilder::new();
-    builder.fetch_options(fetch_options);
+    builder.fetch_options(opts);
 
-    info!("Starting clone operation");
-    let repo = builder.clone(repo_url, local_path)?;
+    // Clone the repository with specific options
+    let repo = builder.clone(repo_url, local_path).map_err(|e| {
+        error!("Failed to clone repository: {}", e);
+        e
+    })?;
+
     info!("Repository cloned successfully");
-
     Ok(repo)
 }
 
@@ -89,17 +76,33 @@ pub fn process_pr(webhook_data: &ParsedWebhookData) -> Result<String, git2::Erro
                 Ok(commits) => commits,
                 Err(e) => return Err(git2::Error::from_str(&e.to_string())),
             };
-
+            info!("Retrieved commits from MR: {:?}", commits);
+            
             let _result = fetch_merge_request(&local_path, "origin", iid, "gitcode");
-
+            
+            info!("Branch labels: {:?}", br_labels);
             for br_label in br_labels {
-                let branch_name = br_label.description.as_ref().unwrap();
-                switch_branch(&local_path, &branch_name)?;
+                info!("Processing branch label - description: {:?}", br_label.description);
+                let branch_name = match br_label.description.as_ref() {
+                    Some(name) => name,
+                    None => {
+                        error!("Failed to get branch name: branch description is None");
+                        return Err(git2::Error::from_str("Branch description is None"));
+                    }
+                };
+                
+                if let Err(e) = switch_branch(&local_path, &branch_name) {
+                    error!("Failed to switch to branch {}: {}", branch_name, e);
+                    return Err(e);
+                }
                 info!("Switching to branch {}", &branch_name);
                 
                 for commit in commits.iter().rev() {
                     let url = webhook_data.url.as_deref().unwrap_or("unknown");
-                    cherry_pick_commit(&local_path, &commit.sha, &branch_name, url)?;
+                    if let Err(e) = cherry_pick_commit(&local_path, &commit.sha, &branch_name, url) {
+                        error!("Failed to cherry-pick commit {} on branch {}: {}", commit.sha, branch_name, e);
+                        return Err(e);
+                    }
                 }
                 // Push the changes back to origin
                 push_repository(&local_path, "origin", &branch_name)?;
@@ -112,7 +115,7 @@ pub fn process_pr(webhook_data: &ParsedWebhookData) -> Result<String, git2::Erro
 
             Ok("Successfully processed PR".to_string())
         }
-        _ => Ok("PR is not closed or merged".to_string()),
+        _ => Ok("PR is not closed.".to_string()),
     }
 }
 
@@ -180,6 +183,7 @@ pub fn process_github_pr(webhook_data: &ParsedWebhookData) -> Result<String, git
                 Ok(commits) => commits,
                 Err(e) => return Err(git2::Error::from_str(&e.to_string())),
             };
+            info!("Retrieved commits from MR: {:?}", commits);
 
             info!("Fetching merge request");
             let result = fetch_merge_request(&local_path, "origin", iid, "github");
@@ -207,18 +211,37 @@ pub fn process_github_pr(webhook_data: &ParsedWebhookData) -> Result<String, git
                 }
             }
             
+            info!("Branch labels: {:?}", br_labels);
             for br_label in br_labels {
-                let branch_name = br_label.description.as_ref().unwrap();
-                info!("Processing branch: {}", branch_name);
+                info!("Processing branch label - description: {:?}", br_label.description);
+                let branch_name = match br_label.description.as_ref() {
+                    Some(name) => name,
+                    None => {
+                        error!("Failed to get branch name: branch description is None");
+                        return Err(git2::Error::from_str("Branch description is None"));
+                    }
+                };
                 
-                switch_branch(&local_path, &branch_name)?;
+                if let Err(e) = switch_branch(&local_path, &branch_name) {
+                    error!("Failed to switch to branch {}: {}", branch_name, e);
+                    return Err(e);
+                }
                 info!("Switched to branch {}", &branch_name);
                 
                 info!("Cherry-picking commits");
                 for commit in commits.iter().rev() {
                     info!("Cherry-picking commit: {}", commit.sha);
-                    let url = webhook_data.url.as_deref().unwrap_or("unknown");
-                    cherry_pick_commit(&local_path, &commit.sha, &branch_name, url)?;
+                    let url = match webhook_data.url.as_deref() {
+                        Some(u) => u,
+                        None => {
+                            error!("Failed to get webhook URL: url is None");
+                            return Err(git2::Error::from_str("Webhook URL is None"));
+                        }
+                    };
+                    if let Err(e) = cherry_pick_commit(&local_path, &commit.sha, &branch_name, url) {
+                        error!("Failed to cherry-pick commit {} on branch {}: {}", commit.sha, branch_name, e);
+                        return Err(e);
+                    }
                 }
                 
                 info!("Pushing changes to target remote");
@@ -320,6 +343,7 @@ pub fn gitcode_credentials_callback(
     _user_from_url: Option<&str>,
     _cred: git2::CredentialType,
 ) -> Result<git2::Cred, git2::Error> {
+    info!("GitCode credentials callback triggered");
     let username = env::var("GITCODE_USERNAME").expect("GITCODE_USERNAME not set in environment");
     let token = env::var("GITCODE_TOKEN").expect("GITCODE_TOKEN not set in environment");
     // For HTTP(S) URLs, we need to provide the username and token as password
@@ -334,8 +358,6 @@ pub fn github_credentials_callback(
     info!("GitHub credentials callback triggered");
     let username = env::var("GITHUB_USERNAME").expect("GITHUB_USERNAME not set in environment");
     let token = env::var("GITHUB_TOKEN").expect("GITHUB_TOKEN not set in environment");
-    info!("Using GitHub credentials for user: {}", username);
-    info!("Token starts with: {}...", &token[..10]);
     // For GitHub, we use the token as the password
     git2::Cred::userpass_plaintext(&username, &token)
 }
@@ -420,18 +442,21 @@ pub fn fetch_merge_request(repo_path: &PathBuf, remote_name: &str, iid: u32, pla
     let mut remote = repo.find_remote(remote_name)?;
     info!("Found remote: {}", remote_name);
 
-    // Set up callbacks for authentication
-    let mut callbacks = RemoteCallbacks::new();
-    callbacks.credentials(match platform {
-        "github" => github_credentials_callback,
-        "gitcode" => gitcode_credentials_callback,
+    // Create fetch options with appropriate callbacks
+    let mut fetch_opts = git2::FetchOptions::new();
+    fetch_opts.remote_callbacks(match platform {
+        "github" => {
+            let mut callbacks = RemoteCallbacks::new();
+            callbacks.credentials(github_credentials_callback);
+            callbacks
+        },
+        "gitcode" => {
+            let mut callbacks = RemoteCallbacks::new();
+            callbacks.credentials(gitcode_credentials_callback);
+            callbacks
+        },
         _ => return Err(git2::Error::from_str("Unsupported platform")),
     });
-    info!("Set up authentication callbacks");
-
-    // Configure fetch options
-    let mut fetch_opts = git2::FetchOptions::new();
-    fetch_opts.remote_callbacks(callbacks);
 
     // Create the refspec based on platform
     let refspec = match platform {
@@ -452,7 +477,6 @@ pub fn fetch_merge_request(repo_path: &PathBuf, remote_name: &str, iid: u32, pla
 
     Ok(())
 }
-
 
 pub fn add_remote_repository(
     repo_path: &PathBuf,

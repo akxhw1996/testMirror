@@ -3,17 +3,32 @@
 use rocket::routes;
 use std::sync::RwLock;
 use std::process;
-use rpassword::read_password;
-use std::io::Write;
 use crate::api::routes::{github_handle, gitcode_handle};
 use std::env;
 use hex::decode;
 use crate::utils::aes_cbc;
 use log::{info, error};
+use keyring::Entry;
 
 mod models;
 mod utils;
 mod api;
+
+const SERVICE_NAME: &str = "webhook_service";
+const USERNAME: &str = "webhook";
+pub fn get_service_key() -> Result<String, keyring::Error> {
+    let entry = Entry::new(SERVICE_NAME, USERNAME)?;
+    match entry.get_password() {
+        Ok(password) => {
+            info!("Service key retrieved from keyring");
+            Ok(password)
+        }
+        Err(err) => {
+            error!("Failed to retrieve service key from keyring: {}", err);
+            Err(err)
+        }
+    }
+}
 
 #[launch]
 fn rocket() -> _ {
@@ -23,9 +38,15 @@ fn rocket() -> _ {
 
     // Load environment variables from .env file
     dotenv::dotenv().ok();
-    print!("Enter service key: ");
-    std::io::stdout().flush().unwrap();
-    let password = read_password().unwrap();
+    
+    // Get service key
+    let password = match get_service_key() {
+        Ok(password) => password,
+        Err(err) => {
+            error!("Failed to retrieve service key: {}", err);
+            process::exit(1);
+        }
+    };
     let key = utils::hash::sha256_hex(&password);
     
     // Decrypt environment variables

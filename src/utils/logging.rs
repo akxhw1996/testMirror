@@ -1,8 +1,7 @@
-use std::fs::{self, File, OpenOptions};
+use std::fs::{self, OpenOptions};
 use std::io::Write;
 use env_logger::Builder;
 use log::LevelFilter;
-use std::path::Path;
 
 pub fn init_production_logger() {
     let log_dir = "logs";
